@@ -154,10 +154,10 @@
   <span class="chip" id="chip-docker"><span class="dot"></span><span>Docker <b>…</b></span></span>
   <span class="chip" id="chip-task"><span class="dot"></span><span>Autostart <b>…</b></span></span>
   <span class="spacer"></span>
-  <span class="muted" id="updated"></span>
-  <button class="btn" id="btn-refresh" title="Aktualisieren (inkl. Online-Check)">⟳ Aktualisieren</button>
+  <button class="btn" id="btn-refresh" title="Aktualisieren (inkl. Online-Check)">⟳</button>
   <button class="btn" id="btn-add">＋ Projekt</button>
-  <button class="btn ghost" id="btn-update" title="Panel-Code aktualisieren (von GitHub)">⬆ Panel</button>
+  <button class="btn ghost" id="btn-logs" title="Protokolle der letzten Deploys, Umzüge und Updates">📜 Logs</button>
+  <button class="btn ghost" id="btn-update" title="Panel-Code aktualisieren (von GitHub)">⬆ Update</button>
   <button class="btn ghost" id="btn-theme" title="Hell/Dunkel umschalten">🌓</button>
 </header>
 
@@ -289,7 +289,7 @@
       views = fresh;
       data = views[selected];
       render();
-      $("#updated").textContent = "Stand " + new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      $("#btn-refresh").title = "Aktualisieren (Stand " + new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) + ")";
     } catch (e) {
       if (!$("#dead").classList.contains("show")) toast("Fehler beim Laden: " + e.message, true);
     } finally {
@@ -703,6 +703,21 @@
     openModal("Panel-Update", body, [h("button", { class: "btn", onclick: closeModal }, "Schließen"), btn]);
   }
   $("#btn-update").onclick = updateDialog;
+
+  // ---------- gespeicherte Protokolle (überleben Neustarts)
+  async function logsDialog() {
+    const m = selected;
+    const list = h("div", {}, h("p", { class: "muted" }, "lädt …"));
+    openModal("Protokolle" + (selfName ? " · " + m : ""), list, [h("button", { class: "btn", onclick: closeModal }, "Schließen")]);
+    try {
+      const r = await act("job_logs", {}, m);
+      if (!r.files.length) { list.replaceChildren(h("p", { class: "muted" }, "Noch keine Protokolle.")); return; }
+      list.replaceChildren(...r.files.map((f) => h("div", { class: "repo" },
+        h("div", { class: "grow" }, h("div", { class: "path" }, f.replace(/\.log$/, ""))),
+        h("button", { class: "btn", onclick: () => showOutput(f.replace(/\.log$/, ""), "job_logs", { file: f }) }, "Anzeigen"))));
+    } catch (e) { list.replaceChildren(h("p", { class: "muted" }, "Fehler: " + e.message)); }
+  }
+  $("#btn-logs").onclick = logsDialog;
 
   $("#btn-refresh").onclick = () => load(true);
   $("#btn-add").onclick = addProject;

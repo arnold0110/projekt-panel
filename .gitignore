@@ -6,6 +6,7 @@ projects.json
 incoming/
 outgoing/
 backups/
+logs/
 panel/.running.json
 panel/.token
 __pycache__/

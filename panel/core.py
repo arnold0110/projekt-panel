@@ -24,12 +24,46 @@ IS_WINDOWS = os.name == "nt"
 NO_WINDOW = 0x08000000 if IS_WINDOWS else 0  # CREATE_NO_WINDOW: keine aufblitzenden Konsolen
 
 config_lock = threading.Lock()
+LOG_DIR = BASE_DIR / "logs"
+
+
+def refresh_path():
+    """PATH frisch aus der Windows-Registry lesen.
+
+    Als geplante Aufgabe gestartet, erbt das Panel einen evtl. veralteten PATH – frisch
+    installierte Programme (cloudflared, docker, git …) wären dann unsichtbar.
+    """
+    if not IS_WINDOWS:
+        return
+    try:
+        import winreg
+        parts = []
+        for root, key in ((winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
+                          (winreg.HKEY_CURRENT_USER, r"Environment")):
+            try:
+                with winreg.OpenKey(root, key) as k:
+                    val, _ = winreg.QueryValueEx(k, "Path")
+                    parts += [os.path.expandvars(x) for x in val.split(";") if x.strip()]
+            except OSError:
+                pass
+        current = os.environ.get("PATH", "").split(";")
+        merged = []
+        for x in parts + current:
+            if x and x.lower() not in (m.lower() for m in merged):
+                merged.append(x)
+        os.environ["PATH"] = ";".join(merged)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+refresh_path()
 
 
 # ------------------------------------------------------------ Hilfen
 
 def run(cmd, cwd=None, timeout=30):
     """Führt einen Befehl aus und gibt (exitcode, ausgabe) zurück – wirft nie."""
+    refresh_path()
     try:
         p = subprocess.run(
             cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8",
@@ -287,17 +321,37 @@ def start_func_job(title, fn):
     with jobs_lock:
         jobs[job_id] = job
 
+    LOG_DIR.mkdir(exist_ok=True)
+    safe = re.sub(r"[^\w.\- ]+", "_", title)[:60].strip()
+    log_file = LOG_DIR / f"{time.strftime('%Y-%m-%d_%H-%M-%S')} {safe}.log"
+    job["log_file"] = str(log_file)
+
     def log(text=""):
-        job["output"] += str(text) + "\n"
+        line = str(text) + "\n"
+        job["output"] += line
+        try:
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(line)
+        except OSError:
+            pass
 
     def worker():
+        refresh_path()
         try:
             result = fn(log)
             job["code"] = 0 if result is None else int(result)
         except Exception as e:  # noqa: BLE001
             log(f"❌ Fehler: {e}")
             job["code"] = 1
+        log(f"--- Ende (Exit-Code {job['code']}) ---")
         job["done"] = True
+        # alte Protokolle aufräumen (nur die letzten 50 behalten)
+        try:
+            old = sorted(LOG_DIR.glob("*.log"))[:-50]
+            for f in old:
+                f.unlink()
+        except OSError:
+            pass
 
     threading.Thread(target=worker, daemon=True).start()
     return job_id
@@ -546,6 +600,13 @@ def action(name, data):
     if name == "autostart_log":
         f = BASE_DIR / "start_all.log"
         return {"output": f.read_text(encoding="utf-8-sig", errors="replace")[-20000:] if f.exists() else "(noch kein Log)"}
+
+    if name == "job_logs":
+        files = sorted(LOG_DIR.glob("*.log"), reverse=True)[:15] if LOG_DIR.exists() else []
+        if data.get("file"):
+            f = LOG_DIR / Path(data["file"]).name
+            return {"output": f.read_text(encoding="utf-8", errors="replace")[-30000:] if f.exists() else "(nicht gefunden)"}
+        return {"files": [f.name for f in files]}
 
     if name == "panel_update":
         return {"job": start_func_job("Panel-Update", panel_update)}
