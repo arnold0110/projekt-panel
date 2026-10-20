@@ -287,9 +287,31 @@ def running_url():
     return None
 
 
+def restart_self():
+    """Neuen Server-Prozess starten und diesen beenden (z.B. nach einem Update)."""
+    args = [sys.executable, str(Path(__file__).resolve()), "--server", "--restarted"]
+    subprocess.Popen(args, cwd=str(PANEL_DIR),
+                     creationflags=(0x00000008 | 0x00000200) if core.IS_WINDOWS else 0,
+                     start_new_session=not core.IS_WINDOWS)
+    _kill_tunnel()
+    os._exit(0)
+
+
+def bind_server(port):
+    """Port belegen – nach einem Neustart evtl. ein paar Sekunden warten, bis der alte Prozess weg ist."""
+    for _ in range(60):
+        try:
+            return ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        except OSError:
+            if "--restarted" not in sys.argv or port == 0:
+                raise
+            time.sleep(0.5)
+    return ThreadingHTTPServer(("127.0.0.1", port), Handler)
+
+
 def main():
     global last_ping
-    existing = running_url()
+    existing = None if "--restarted" in sys.argv else running_url()
     if existing:
         if not SERVER_MODE:
             open_window(existing)
@@ -315,7 +337,7 @@ def main():
     port = MACHINE["port"] if MACHINE else 0
     if "--port" in sys.argv:
         port = int(sys.argv[sys.argv.index("--port") + 1])
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    server = bind_server(port)
     port = server.server_port
     RUNNING_PATH.write_text(json.dumps({"port": port, "token": TOKEN}))
     url = f"http://127.0.0.1:{port}/#{TOKEN}"
@@ -326,6 +348,8 @@ def main():
     elif not SERVER_MODE:
         open_window(url)
 
+    if SERVER_MODE:
+        core.RESTART_HOOK = restart_self
     if SERVER_MODE and MACHINE:
         threading.Thread(target=supervise_panel_tunnel, args=(port,), daemon=True).start()
 

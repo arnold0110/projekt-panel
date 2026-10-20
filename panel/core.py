@@ -422,17 +422,14 @@ def panel_version():
     return {"hash": h, "subject": subject, "date": date}
 
 
+RESTART_HOOK = None  # wird von panel.pyw gesetzt: startet den Server-Prozess neu
+
+
 def schedule_panel_restart(delay=3):
-    """Startet den Panel-Server nach kurzer Pause neu (über restart_panel.ps1)."""
-    script = BASE_DIR / "restart_panel.ps1"
-    if not IS_WINDOWS or not script.exists():
+    """Startet den Panel-Server nach kurzer Pause neu (der neue Prozess übernimmt den Port)."""
+    if RESTART_HOOK is None:
         return False
-    subprocess.Popen(
-        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command",
-         f"Start-Sleep -Seconds {int(delay)}; & '{script}'"],
-        creationflags=0x00000008 | 0x00000200 | NO_WINDOW,  # DETACHED_PROCESS | NEW_PROCESS_GROUP
-        cwd=str(BASE_DIR),
-    )
+    threading.Timer(delay, RESTART_HOOK).start()
     return True
 
 
