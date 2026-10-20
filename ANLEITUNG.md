@@ -96,3 +96,13 @@ Der Panel-Code liegt im privaten Repo **github.com/arnold0110/projekt-panel**.
 Änderst du etwas am Panel, pushst du es dorthin und klickst im Panel oben auf **„⬆ Panel“ →
 „Alle Rechner aktualisieren“**. Jeder Rechner holt dann den neuen Stand (`git pull`) und startet
 sein Panel neu. `machine.json`, `projects.json` und Logs sind nicht im Repo und bleiben unverändert.
+
+---
+
+## Neues Projekt anlegen
+
+Im Panel **＋ Projekt → „Neues Projekt aus Vorlage“**: Name eingeben (z. B. `fotobox`) → **Anlegen** → **▶ Starten**.
+Das Panel kopiert `vorlage/`, wählt einen auf allen Rechnern freien Port, erzeugt `config.py`,
+legt Git-Repo, Cloudflare-Tunnel und Subdomain an und nimmt das Projekt ins Panel auf.
+Die Vorlage selbst liegt in `vorlage/` und wird mit „⬆ Update“ auf alle Rechner verteilt – Änderungen
+daran gelten für alle künftigen Projekte.

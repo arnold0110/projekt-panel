@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+config.py
+cloudflared.log
+cloudflared.pid
+data/
+.env

@@ -205,6 +205,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(403, {"error": "Nur am Rechner selbst möglich"})
                 if name == "move_project":
                     return self._send(200, start_move(data))
+                if name == "create_project":
+                    return self._send(200, start_create(data))
                 # Doppelbetrieb verhindern: erst beim anderen Rechner nachfragen
                 if name == "deploy" and not data.get("force"):
                     hits = remote.find_elsewhere(MACHINE, data.get("path", ""), "running")
@@ -245,6 +247,32 @@ def start_move(data):
     name = Path(entry["path"]).name
     return {"job": core.start_func_job(f"Umzug: {name} → {peer['name']}",
                                        lambda log: migrate.move_project(MACHINE, peer, entry, log))}
+
+
+def start_create(data):
+    """Neues Projekt aus der Vorlage – Port wird über alle Rechner hinweg eindeutig gewählt."""
+    used = set()
+    if MACHINE:
+        for peer in MACHINE.get("peers", []):
+            try:
+                ov = remote.peer_request(MACHINE, peer, "GET", "/api/overview", timeout=20)
+            except remote.PeerError:
+                continue
+            for p in ov.get("projects", []):
+                url = p.get("local_url") or ""
+                if url.rsplit(":", 1)[-1].isdigit():
+                    used.add(int(url.rsplit(":", 1)[-1]))
+    domain = (MACHINE or {}).get("domain") or (
+        MACHINE["public_hostname"].split(".", 1)[1] if MACHINE and "." in MACHINE.get("public_hostname", "") else "arnold0110.com")
+    name = (data.get("name") or "").strip().lower()
+    if not core.NAME_RE.match(name):
+        raise ValueError("Name: nur Kleinbuchstaben, Ziffern und Bindestrich (2–41 Zeichen)")
+    target = Path(core.load_config()["scan_root"]) / name
+    if target.exists():
+        raise ValueError(f"Den Ordner {target} gibt es schon – bitte einen anderen Namen wählen")
+    return {"job": core.start_func_job(
+        f"Neues Projekt: {name}",
+        lambda log: core.create_project(log, name, data.get("subdomain"), (data.get("title") or "").strip(), used, domain))}
 
 
 # ------------------------------------------------------------ Panel-Tunnel

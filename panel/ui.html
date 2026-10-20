@@ -147,6 +147,11 @@
   .gap { height: 10px; }
   .name.small { font-size: 14px; }
   .hidden { display: none !important; }
+  .create { border: 1px solid var(--line); background: var(--bg); border-radius: 12px; padding: 14px; margin-bottom: 18px; display: flex; flex-direction: column; gap: 6px; }
+  .cgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  @media (max-width: 700px) { .cgrid { grid-template-columns: 1fr; } }
+  .row.end { justify-content: flex-end; margin-top: 6px; }
+  .sep-top { margin-top: 4px; }
   .filters { display: flex; gap: 8px; margin: -4px 0 14px; flex-wrap: wrap; }
   .filters:empty { display: none; }
   .fchip { border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 999px; padding: 4px 12px; font-size: 13px; cursor: pointer; }
@@ -156,6 +161,7 @@
   .archive h2 { font-size: 14px; color: var(--muted); font-weight: 600; margin: 28px 0 10px; text-transform: uppercase; letter-spacing: .06em; }
   .acard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; }
   .acard .grow { flex: 1; min-width: 0; }
+  .acard .path { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .alist { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 10px; }
 </style>
 </head>
@@ -708,7 +714,36 @@
     const m = selected;
     const list = h("div", {}, h("p", { class: "muted" }, "Suche Git-Repos …"));
     const root = h("input", { class: "t" });
+    // --- Neues Projekt aus Vorlage
+    const fName = h("input", { class: "t", placeholder: "z.B. fotobox", autocomplete: "off" });
+    const fTitle = h("input", { class: "t", placeholder: "z.B. Fotobox Hochzeit", autocomplete: "off" });
+    const fSub = h("input", { class: "t", placeholder: "wie Name", autocomplete: "off" });
+    const preview = h("div", { class: "hint" });
+    const slug = (v) => v.toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss")
+      .replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 41);
+    const upd = () => {
+      const n = slug(fName.value), sd = slug(fSub.value) || n;
+      preview.textContent = n ? `Ordner: …\\${n} · Adresse: https://${sd}.arnold0110.com · Port wird automatisch gewählt` : "";
+    };
+    fName.addEventListener("input", upd); fSub.addEventListener("input", upd);
+    const createBtn = h("button", { class: "btn primary", onclick: () => {
+      const n = slug(fName.value);
+      if (!n || n.length < 2) { toast("Bitte einen Namen eingeben", true); return; }
+      job("create_project", { name: n, title: fTitle.value.trim(), subdomain: slug(fSub.value) || n }, m);
+    } }, "✨ Anlegen");
+    const createBox = h("div", { class: "create" },
+      h("div", { class: "name small" }, "✨ Neues Projekt aus Vorlage" + (selfName ? " (auf " + m + ")" : "")),
+      h("div", { class: "hint" }, "Flask-App im Docker-Container, mit Tunnel, Subdomain, Config und Git – sofort startklar."),
+      h("div", { class: "cgrid" },
+        h("div", {}, h("label", { class: "f" }, "Name (Ordner, Container, Tunnel)"), fName),
+        h("div", {}, h("label", { class: "f" }, "Titel (optional)"), fTitle),
+        h("div", {}, h("label", { class: "f" }, "Subdomain (optional)"), fSub)),
+      preview,
+      h("div", { class: "row end" }, createBtn));
+
     const body = h("div", {},
+      createBox,
+      h("div", { class: "name small sep-top" }, "Vorhandenes Git-Repo hinzufügen"),
       h("label", { class: "f" }, "Gesucht wird in" + (selfName ? " (auf " + m + ")" : "")),
       h("div", { class: "row" }, root, h("button", { class: "btn", onclick: async () => { await act("set_scan_root", { value: root.value }, m); fill(); } }, "Suchen")),
       h("div", { class: "hint" }, "Alle Unterordner mit .git werden angezeigt."),

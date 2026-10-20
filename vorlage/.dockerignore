@@ -1,0 +1,6 @@
+.git
+data
+__pycache__
+*.pyc
+cloudflared.log
+cloudflared.pid

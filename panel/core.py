@@ -456,6 +456,107 @@ def panel_update(log):
     return 0
 
 
+# ------------------------------------------------------------ Neues Projekt aus Vorlage
+
+TEMPLATE_DIR = BASE_DIR / "vorlage"
+NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,40}$")
+
+
+def local_ports():
+    ports = set()
+    for p in load_config()["projects"]:
+        port = parse_deploy(p["path"]).get("port") if Path(p["path"]).is_dir() else None
+        if port:
+            ports.add(port)
+    return ports
+
+
+def _port_free(port):
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(("127.0.0.1", port))
+            return True
+        except OSError:
+            return False
+
+
+def pick_port(used):
+    used = set(used) | local_ports() | {5000, 5001}
+    for port in range(5002, 5999):
+        if port not in used and _port_free(port):
+            return port
+    raise RuntimeError("Kein freier Port zwischen 5002 und 5999")
+
+
+def create_project(log, name, subdomain, title, used_ports, domain):
+    name = (name or "").strip().lower()
+    subdomain = (subdomain or name).strip().lower()
+    if not NAME_RE.match(name):
+        raise ValueError("Name: nur Kleinbuchstaben, Ziffern und Bindestrich (2–41 Zeichen)")
+    if not NAME_RE.match(subdomain):
+        raise ValueError("Subdomain: nur Kleinbuchstaben, Ziffern und Bindestrich")
+    if not TEMPLATE_DIR.is_dir():
+        raise RuntimeError("Vorlage fehlt (docker-autostart/vorlage) – Panel aktualisieren")
+    cfg = load_config()
+    target = Path(cfg["scan_root"]) / name
+    if target.exists():
+        raise ValueError(f"Ordner {target} existiert schon")
+    hostname = f"{subdomain}.{domain}"
+
+    # Tunnel-Name darf noch nicht vergeben sein
+    code, out = run(["cloudflared", "tunnel", "list"], timeout=30)
+    if code == 127:
+        raise RuntimeError("cloudflared nicht gefunden")
+    if code == 0 and re.search(rf"\s{re.escape(name)}\s", out):
+        raise ValueError(f"Es gibt schon einen Cloudflare-Tunnel namens '{name}'")
+
+    port = pick_port(used_ports)
+    log(f"Projekt „{name}“ → https://{hostname} (Port {port})")
+
+    log("1/5 Vorlage kopieren …")
+    shutil.copytree(TEMPLATE_DIR, target, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "config.py", "data"))
+    deploy = target / "deploy.py"
+    text = deploy.read_text(encoding="utf-8")
+    for key, value in (("TUNNEL_NAME", f'"{name}"'), ("PUBLIC_HOSTNAME", f'"{hostname}"'), ("HOST_PORT", str(port)),
+                       ("CONTAINER_NAME", f'"{name}"'), ("IMAGE_NAME", f'"{name}"'), ("VOLUME_NAME", f'"{name}_data"')):
+        text, n = re.subn(rf"^({key}\s*=\s*)[^#\n]*?(\s*(#.*)?)$", lambda m: m.group(1) + value + m.group(2), text, count=1, flags=re.M)
+        if n != 1:
+            raise RuntimeError(f"{key} nicht in deploy.py gefunden")
+    deploy.write_text(text, encoding="utf-8")
+    readme = target / "README.md"
+    readme.write_text(f"# {title or name}\n\nhttps://{hostname}\n\nErstellt aus der Projektvorlage des Projekt-Panels.\n"
+                      f"Lokal: http://localhost:{port}\n", encoding="utf-8")
+
+    log("2/5 config.py mit neuem Geheimschlüssel …")
+    (target / "config.py").write_text(
+        f'SECRET_KEY = "{secrets.token_hex(32)}"\nTITLE = {json.dumps(title or name, ensure_ascii=False)}\n', encoding="utf-8")
+
+    log("3/5 Git-Repo anlegen …")
+    stream_cmd(["git", "init", "-b", "main"], str(target), log, prefix="   ")
+    stream_cmd(["git", "add", "-A"], str(target), log, prefix="   ")
+    if stream_cmd(["git", "commit", "-q", "-m", "Neues Projekt aus Vorlage"], str(target), log, prefix="   ") != 0:
+        log("   ⚠️ Commit nicht möglich (git user.name/user.email gesetzt?) – Dateien sind trotzdem angelegt.")
+
+    log("4/5 Cloudflare-Tunnel + DNS …")
+    tunnel_ok = stream_cmd(["cloudflared", "tunnel", "create", name], str(target), log, prefix="   ") == 0
+    if tunnel_ok:
+        if stream_cmd(["cloudflared", "tunnel", "route", "dns", name, hostname], str(target), log, prefix="   ") != 0:
+            log(f"   ⚠️ DNS-Eintrag {hostname} konnte nicht angelegt werden (existiert er schon?). "
+                f"Im Cloudflare-Dashboard prüfen – das Projekt läuft bis dahin nur lokal.")
+    else:
+        log("   ⚠️ Tunnel konnte nicht angelegt werden – Projekt läuft bis dahin nur lokal (HOSTING_MODE).")
+
+    log("5/5 Ins Panel aufnehmen …")
+    cfg = load_config()
+    if not find_project(cfg, str(target)):
+        cfg["projects"].append({"path": str(target), "autostart": False, **({"name": title} if title else {})})
+        save_config(cfg)
+    log("")
+    log(f"✅ Fertig! Jetzt beim Projekt auf „▶ Starten“ klicken. Ordner: {target}")
+    return 0
+
+
 # ------------------------------------------------------------ Aktionen
 
 def open_path(target):
