@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projekt-Panel</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎛️</text></svg>">
+<style>
+  :root {
+    --bg: #0f1115; --panel: #161a21; --card: #1a1f27; --line: #272e39; --line-2: #323b48;
+    --text: #e8ecf2; --muted: #8b95a5; --dim: #5f6978;
+    --accent: #5b9dff; --accent-2: #7cb1ff;
+    --ok: #3fcf8e; --warn: #f2b84b; --bad: #ff6b6b; --off: #6b7584;
+    --radius: 12px;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f6f9; --panel: #ffffff; --card: #ffffff; --line: #e3e7ee; --line-2: #d3d9e2;
+    --text: #18202b; --muted: #5d6878; --dim: #8a94a3;
+    --accent: #2f6fdf; --accent-2: #1f5cc6;
+    --ok: #179a5f; --warn: #b7791f; --bad: #d64545; --off: #8a94a3;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+  button { font: inherit; color: inherit; }
+  a { color: var(--accent); }
+
+  header {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 14px 22px; background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 17px; margin: 0 8px 0 0; font-weight: 650; letter-spacing: .01em; }
+  .spacer { flex: 1; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 8px; padding: 5px 6px 5px 11px;
+    border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--muted); font-size: 13px;
+  }
+  .chip b { color: var(--text); font-weight: 600; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--off); flex: none; }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }
+  .dot.bad { background: var(--bad); }
+  .dot.warn { background: var(--warn); }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    border: 1px solid var(--line-2); background: var(--card); border-radius: 8px; padding: 5px 10px; font-size: 13px;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn:disabled { opacity: .5; cursor: default; border-color: var(--line-2); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .btn.primary:hover { background: var(--accent-2); }
+  .btn.danger:hover { border-color: var(--bad); color: var(--bad); }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn.ghost:hover { color: var(--text); border-color: var(--line-2); }
+  .btn.round { border-radius: 999px; padding: 3px 10px; }
+
+  main { padding: 20px 22px 60px; max-width: 1400px; margin: 0 auto; }
+  .banner { border: 1px solid color-mix(in srgb, var(--warn) 50%, var(--line)); background: color-mix(in srgb, var(--warn) 10%, var(--panel));
+    border-radius: var(--radius); padding: 12px 14px; margin-bottom: 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .card.missing { opacity: .6; }
+  .card-head { display: flex; align-items: flex-start; gap: 10px; }
+  .card-head .title { flex: 1; min-width: 0; }
+  .name { font-size: 16px; font-weight: 650; overflow-wrap: anywhere; }
+  .path { color: var(--dim); font-size: 12px; overflow-wrap: anywhere; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+  .note { color: var(--muted); font-size: 13px; margin-top: 2px; }
+
+  .badges { display: flex; gap: 6px; flex-wrap: wrap; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 9px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted); background: var(--panel); white-space: nowrap; }
+  .badge b { color: var(--text); font-weight: 600; }
+
+  .row { display: flex; align-items: center; gap: 10px; }
+  .autostart { justify-content: space-between; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+  .autostart .lbl { font-weight: 600; }
+  .autostart .sub { color: var(--muted); font-size: 12px; }
+
+  .switch { position: relative; width: 40px; height: 22px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .switch span { position: absolute; inset: 0; background: var(--line-2); border-radius: 999px; transition: background .15s; cursor: pointer; }
+  .switch span::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; background: #fff; border-radius: 50%; transition: transform .15s; }
+  .switch input:checked + span { background: var(--ok); }
+  .switch input:checked + span::after { transform: translateX(18px); }
+  .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .switch input:disabled + span { opacity: .4; cursor: default; }
+
+  .git { border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+  .git .commit { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .git .commit code { color: var(--text); font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+  .git .flags { display: flex; gap: 10px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+  .git .flags .warn { color: var(--warn); }
+  .git .flags .accent { color: var(--accent); }
+
+  .links { display: flex; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+  .links a { color: var(--muted); text-decoration: none; border-bottom: 1px dotted var(--dim); cursor: pointer; }
+  .links a:hover { color: var(--accent); }
+
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+  .tools { display: flex; gap: 2px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 8px; margin-top: -4px; }
+  .tools .btn { padding: 4px 8px; font-size: 12px; }
+
+  .empty { text-align: center; color: var(--muted); padding: 60px 20px; border: 1px dashed var(--line-2); border-radius: var(--radius); }
+
+  /* Modal */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: center; justify-content: center; z-index: 20; padding: 20px; }
+  .overlay.open { display: flex; }
+  .modal { background: var(--panel); border: 1px solid var(--line-2); border-radius: 14px; width: min(860px, 100%); max-height: 88vh; display: flex; flex-direction: column; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+  .modal header { position: static; background: transparent; backdrop-filter: none; padding: 14px 18px; }
+  .modal header h2 { margin: 0; font-size: 15px; flex: 1; }
+  .modal .body { padding: 16px 18px; overflow: auto; }
+  .modal .foot { padding: 12px 18px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; }
+  pre.out { margin: 0; white-space: pre-wrap; word-break: break-word; font: 12px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-height: 120px; max-height: 60vh; overflow: auto; }
+  .job-state { font-size: 13px; color: var(--muted); }
+  label.f { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
+  input.t { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg); color: var(--text); font: inherit; }
+  input.t:focus { outline: none; border-color: var(--accent); }
+  .hint { color: var(--dim); font-size: 12px; margin-top: 4px; }
+  .repo { display: flex; align-items: center; gap: 12px; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+  .repo:last-child { border-bottom: 0; }
+  .repo .grow { flex: 1; min-width: 0; }
+
+  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
+    padding: 9px 14px; border-radius: 10px; font-size: 13px; z-index: 30; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  .toast.err { background: var(--bad); color: #fff; }
+  .muted { color: var(--muted); }
+  .dead { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: var(--bg); z-index: 50; text-align: center; padding: 20px; }
+  .dead.show { display: flex; }
+  /* Rechner & Umzug */
+  .mtabs { display: flex; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+  .mtabs:empty { display: none; }
+  .mtab { display: inline-flex; align-items: center; gap: 7px; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 7px; cursor: pointer; font-weight: 500; }
+  .mtab.active { background: var(--card); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-2); }
+  .card.conflict { border-color: var(--bad); }
+  .conflict-msg { color: var(--bad); font-size: 13px; font-weight: 600; }
+  .badge.hosted { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+  .btn.armed { border-color: var(--warn); color: var(--warn); }
+  .gap { height: 10px; }
+  .name.small { font-size: 14px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎛️ Projekt-Panel</h1>
+  <nav class="mtabs" id="machines" aria-label="Rechner"></nav>
+  <span class="chip" id="chip-docker"><span class="dot"></span><span>Docker <b>…</b></span></span>
+  <span class="chip" id="chip-task"><span class="dot"></span><span>Autostart <b>…</b></span></span>
+  <span class="spacer"></span>
+  <span class="muted" id="updated"></span>
+  <button class="btn" id="btn-refresh" title="Aktualisieren (inkl. Online-Check)">⟳ Aktualisieren</button>
+  <button class="btn" id="btn-add">＋ Projekt</button>
+  <button class="btn ghost" id="btn-update" title="Panel-Code aktualisieren (von GitHub)">⬆ Panel</button>
+  <button class="btn ghost" id="btn-theme" title="Hell/Dunkel umschalten">🌓</button>
+</header>
+
+<main>
+  <div id="banner"></div>
+  <div class="grid" id="grid"></div>
+</main>
+
+<div class="overlay" id="overlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <header><h2 id="m-title"></h2><span class="job-state" id="m-state"></span><button class="btn ghost" id="m-close" aria-label="Schließen">✕</button></header>
+    <div class="body" id="m-body"></div>
+    <div class="foot" id="m-foot"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<div class="dead" id="dead"><div><h2>Keine Verbindung zum Panel</h2><p class="muted">Lokal: über die Desktop-Verknüpfung neu öffnen. Unterwegs: Seite neu laden – evtl. ist der Rechner aus.</p></div></div>
+
+<script>
+(() => {
+  // Token aus der URL übernehmen und für Neuladen merken (bleibt über Panel-Neustarts gleich)
+  let TOKEN = location.hash.slice(1);
+  try { if (TOKEN) sessionStorage.setItem("panelToken", TOKEN); else TOKEN = sessionStorage.getItem("panelToken") || ""; } catch (e) {}
+  history.replaceState(null, "", "/");
+  let restarting = false;
+  const $ = (s, r = document) => r.querySelector(s);
+
+  let selfName = null;          // Name dieses Rechners (null = nur lokal)
+  let machines = [];            // [selfName, ...peers]
+  let selected = null;          // angezeigter Rechner
+  let views = {};               // name -> overview | { error }
+  let data = null;              // overview des angezeigten Rechners
+  let isRemote = false;         // über Cloudflare geöffnet?
+  let lastOnline = 0;
+  let loading = false;
+  let jobTimer = null;
+
+  // ---------- Theme
+  try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  $("#btn-theme").onclick = () => {
+    const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("theme", next); } catch (e) {}
+  };
+
+  // ---------- API
+  function withMachine(path, m) {
+    if (!m || m === selfName) return path;
+    return path + (path.includes("?") ? "&" : "?") + "m=" + encodeURIComponent(m);
+  }
+  async function api(path, body, m) {
+    let res;
+    try {
+      res = await fetch(withMachine(path, m), {
+        method: body === undefined ? "GET" : "POST",
+        headers: { "X-Token": TOKEN, "X-Panel": "1", "Content-Type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        credentials: "same-origin",
+      });
+    } catch (e) {
+      if (!restarting) $("#dead").classList.add("show");
+      throw e;
+    }
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || ("HTTP " + res.status));
+    return json;
+  }
+  const act = (name, body = {}, m = selected) => api("/api/action/" + name, body, m);
+
+  function toast(msg, err) {
+    const t = $("#toast");
+    t.textContent = msg;
+    t.className = "toast show" + (err ? " err" : "");
+    clearTimeout(t._h);
+    t._h = setTimeout(() => (t.className = "toast"), 3200);
+  }
+
+  // ---------- DOM helper
+  function h(tag, attrs = {}, ...kids) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v == null || v === false) continue;
+      if (k === "class") e.className = v;
+      else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+      else if (k === "checked" || k === "disabled") e[k] = !!v;
+      else e.setAttribute(k, v);
+    }
+    for (const kid of kids.flat()) {
+      if (kid == null || kid === false) continue;
+      e.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+    }
+    return e;
+  }
+
+  const localUi = () => !isRemote && selected === selfName;
+  const folderName = (p) => p.split(/[\\/]/).pop();
+
+  // ---------- Laden
+  async function load(online) {
+    if (loading) return;
+    loading = true;
+    $("#btn-refresh").disabled = true;
+    try {
+      const withOnline = online || Date.now() - lastOnline > 60000;
+      const q = withOnline ? "?online=1" : "";
+      const own = await api("/api/overview" + q);
+      selfName = own.machine;
+      isRemote = own.remote;
+      machines = selfName ? [selfName, ...own.peers] : [null];
+      if (selected === null || !machines.includes(selected)) {
+        let saved = null;
+        try { saved = localStorage.getItem("machine"); } catch (e) {}
+        selected = machines.includes(saved) ? saved : selfName;
+      }
+      const fresh = { [selfName]: own };
+      await Promise.all(own.peers.map(async (name) => {
+        try { fresh[name] = await api("/api/overview" + q, undefined, name); }
+        catch (e) { fresh[name] = { error: e.message }; }
+      }));
+      if (!withOnline) {
+        // letzten Online-Status behalten
+        for (const [name, ov] of Object.entries(fresh)) {
+          const prevOv = views[name];
+          if (!ov.projects || !prevOv || !prevOv.projects) continue;
+          const prev = new Map(prevOv.projects.map((p) => [p.path, p.online]));
+          ov.projects.forEach((p) => (p.online = prev.get(p.path) ?? null));
+        }
+      } else lastOnline = Date.now();
+      views = fresh;
+      data = views[selected];
+      render();
+      $("#updated").textContent = "Stand " + new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    } catch (e) {
+      if (!$("#dead").classList.contains("show")) toast("Fehler beim Laden: " + e.message, true);
+    } finally {
+      loading = false;
+      $("#btn-refresh").disabled = false;
+    }
+  }
+
+  function select(name) {
+    selected = name;
+    try { localStorage.setItem("machine", name); } catch (e) {}
+    data = views[name];
+    render();
+  }
+
+  // ---------- Header
+  function renderTabs() {
+    const tabs = $("#machines");
+    if (machines.length < 2) { tabs.replaceChildren(); return; }
+    tabs.replaceChildren(...machines.map((m) => {
+      const v = views[m];
+      const ok = v && !v.error;
+      return h("button", { class: "mtab" + (m === selected ? " active" : ""), onclick: () => select(m), title: ok ? "" : (v && v.error) || "" },
+        h("span", { class: "dot " + (ok ? "ok" : "bad") }), m, m === selfName ? h("span", { class: "muted" }, isRemote ? "" : " (hier)") : null);
+    }));
+  }
+
+  function renderHeader() {
+    renderTabs();
+    const cd = $("#chip-docker");
+    const ct = $("#chip-task");
+    if (!data || data.error) {
+      cd.replaceChildren(h("span", { class: "dot bad" }), h("span", {}, "nicht erreichbar"));
+      ct.replaceChildren();
+      ct.style.display = "none";
+      return;
+    }
+    ct.style.display = "";
+    cd.replaceChildren(...[
+      h("span", { class: "dot " + (data.docker_ok ? "ok" : "bad") }),
+      h("span", {}, "Docker ", h("b", {}, data.docker_ok ? "läuft" : "aus")),
+      (!data.docker_ok && data.is_windows) ? h("button", { class: "btn round", onclick: () => run("start_docker", {}, "Docker Desktop wird gestartet") }, "Starten") : null,
+    ].filter(Boolean));
+
+    const t = data.autostart_task;
+    const kids = [];
+    if (!t.exists) {
+      kids.push(h("span", { class: "dot warn" }), h("span", {}, "Autostart ", h("b", {}, "nicht eingerichtet")));
+      if (data.is_windows) kids.push(h("button", { class: "btn round", onclick: () => job("autostart_register") }, "Einrichten"));
+    } else {
+      const on = t.state !== "Disabled";
+      kids.push(
+        h("span", { class: "dot " + (on ? "ok" : "") }),
+        h("span", { title: t.last_run ? "Zuletzt ausgeführt: " + t.last_run : "" }, "Autostart beim Login ", h("b", {}, on ? "an" : "aus")),
+        h("label", { class: "switch", title: "Autostart-Aufgabe an/aus" },
+          h("input", { type: "checkbox", checked: on, onchange: (e) => run(e.target.checked ? "autostart_enable" : "autostart_disable", {}, e.target.checked ? "Autostart aktiviert" : "Autostart deaktiviert") }),
+          h("span")),
+        h("button", { class: "btn round", title: "Alle Projekte mit Autostart jetzt starten", onclick: () => job("autostart_run_now") }, "▶ Jetzt"),
+        h("button", { class: "btn round", onclick: () => showOutput("Autostart-Log", "autostart_log") }, "Log")
+      );
+    }
+    ct.replaceChildren(...kids);
+  }
+
+  // ---------- Karten
+  function dockerBadge(p) {
+    if (!p.container) return null;
+    if (!data.docker_ok) return h("span", { class: "badge" }, h("span", { class: "dot" }), "Container ", h("b", {}, "unbekannt"));
+    const d = p.docker || {};
+    const map = { running: ["ok", "läuft"], exited: ["", "gestoppt"], created: ["", "erstellt"], restarting: ["warn", "startet neu"], paused: ["warn", "pausiert"], missing: ["", "nicht gebaut"] };
+    const [cls, txt] = map[d.state] || ["warn", d.state || "?"];
+    return h("span", { class: "badge", title: (d.status || "") + (p.container ? " · " + p.container : "") }, h("span", { class: "dot " + cls }), "Container ", h("b", {}, txt));
+  }
+
+  function onlineBadge(p) {
+    if (!p.public_url) return null;
+    if (!p.online) return h("span", { class: "badge" }, h("span", { class: "dot" }), "Online ", h("b", {}, "…"));
+    return h("span", { class: "badge", title: p.public_url + (p.online.code ? " → HTTP " + p.online.code : "") },
+      h("span", { class: "dot " + (p.online.ok ? "ok" : "bad") }), "Online ", h("b", {}, p.online.ok ? "erreichbar" : "nicht erreichbar"));
+  }
+
+  const rtf = new Intl.RelativeTimeFormat("de", { numeric: "auto" });
+  function relTime(iso) {
+    const sec = (new Date(iso) - Date.now()) / 1000;
+    const units = [["year", 31536000], ["month", 2592000], ["week", 604800], ["day", 86400], ["hour", 3600], ["minute", 60]];
+    for (const [u, s] of units) if (Math.abs(sec) >= s) return rtf.format(Math.round(sec / s), u);
+    return "gerade eben";
+  }
+
+  // Wo ist ein Projekt (per Ordnername) gerade aktiv?
+  function activeOn(p) {
+    const name = folderName(p.path).toLowerCase();
+    const where = [];
+    for (const [m, v] of Object.entries(views)) {
+      if (!v || !v.projects) continue;
+      const q = v.projects.find((x) => folderName(x.path).toLowerCase() === name);
+      if (q && ((q.docker && q.docker.state === "running") || q.tunnel)) where.push(m);
+    }
+    return where;
+  }
+
+  function moveButtons(p) {
+    if (!p.deployable || !selfName) return [];
+    return machines.filter((m) => m !== selected).map((target) => {
+      let armed = false;
+      const b = h("button", { class: "btn", title: `Hosting komplett auf ${target} verschieben (stoppt hier, überträgt Daten, startet dort)`, onclick: () => {
+        if (!armed) {
+          armed = true;
+          b.textContent = `Wirklich nach ${target}?`;
+          b.classList.add("armed");
+          setTimeout(() => { if (armed) { armed = false; b.textContent = `⇄ nach ${target}`; b.classList.remove("armed"); } }, 4000);
+          return;
+        }
+        armed = false;
+        job("move_project", { path: p.path, target });
+      } }, `⇄ nach ${target}`);
+      return b;
+    });
+  }
+
+  function openLink(url) { window.open(url, "_blank", "noopener"); }
+
+  function card(p, i) {
+    const g = p.git;
+    const active = activeOn(p);
+    const badges = h("div", { class: "badges" },
+      dockerBadge(p),
+      p.public_url ? h("span", { class: "badge", title: "Cloudflare Tunnel" }, h("span", { class: "dot " + (p.tunnel ? "ok" : "") }), "Tunnel ", h("b", {}, p.tunnel ? "an" : "aus")) : null,
+      onlineBadge(p),
+      p.hosted_on && !active.includes(selected) ? h("span", { class: "badge hosted", title: "Wurde per Umzug verschoben" }, "→ gehostet auf ", h("b", {}, p.hosted_on)) : null,
+      !p.deployable && !p.has_dockerfile ? h("span", { class: "badge" }, "kein Docker-Projekt") : null,
+      p.mode ? h("span", { class: "badge", title: "HOSTING_MODE in deploy.py" }, "Modus ", h("b", {}, p.mode)) : null
+    );
+
+    const autostart = h("div", { class: "row autostart" },
+      h("div", {},
+        h("div", { class: "lbl" }, "Automatisch starten"),
+        h("div", { class: "sub" }, p.deployable ? "führt beim Login deploy.py aus" : "braucht ein deploy.py im Projekt")),
+      h("label", { class: "switch" },
+        h("input", {
+          type: "checkbox", checked: p.autostart, disabled: !p.deployable,
+          "aria-label": "Autostart für " + p.name,
+          onchange: (e) => run("set_autostart", { path: p.path, value: e.target.checked }, e.target.checked ? p.name + ": Autostart an" : p.name + ": Autostart aus"),
+        }),
+        h("span"))
+    );
+
+    let gitBox = null;
+    if (g) {
+      const flags = [];
+      flags.push(h("span", {}, "⎇ ", g.branch));
+      if (g.changes) flags.push(h("span", { class: "warn" }, "● " + g.changes + " Änderung" + (g.changes === 1 ? "" : "en")));
+      else flags.push(h("span", {}, "✓ sauber"));
+      if (g.ahead) flags.push(h("span", { class: "accent", title: "Lokale Commits, die noch nicht gepusht sind" }, "↑ " + g.ahead + " zu pushen"));
+      if (g.behind) flags.push(h("span", { class: "warn", title: "Neue Commits auf GitHub" }, "↓ " + g.behind + " neu"));
+      if (g.ahead === undefined && g.remote) flags.push(h("span", { title: "Kein Upstream-Branch gesetzt" }, "kein Upstream"));
+      if (!g.remote) flags.push(h("span", {}, "kein Remote"));
+      gitBox = h("div", { class: "git" },
+        g.commit ? h("div", { class: "commit", title: g.commit.subject }, h("code", {}, g.commit.hash), "  ", g.commit.subject, " · ", relTime(g.commit.date)) : h("div", { class: "commit" }, "noch keine Commits"),
+        h("div", { class: "flags" }, flags));
+    }
+
+    const links = h("div", { class: "links" },
+      p.public_url ? h("a", { onclick: () => openLink(p.public_url) }, p.public_url.replace(/^https?:\/\//, "")) : null,
+      p.local_url && localUi() ? h("a", { onclick: () => openLink(p.local_url) }, p.local_url.replace(/^https?:\/\//, "")) : null,
+      g && g.github ? h("a", { onclick: () => openLink(g.github) }, "GitHub") : null
+    );
+
+    const running = p.docker && p.docker.state === "running";
+    const actions = h("div", { class: "actions" },
+      p.deployable ? h("button", { class: "btn primary", onclick: () => job("deploy", { path: p.path }), title: "deploy.py ausführen: Image bauen, Container + Tunnel starten" }, running ? "⟳ Neu deployen" : "▶ Starten") : null,
+      p.container && running ? h("button", { class: "btn", onclick: () => run("restart_container", { path: p.path }, "Container neu gestartet"), title: "Container neu starten (ohne Neubau)" }, "↻ Neustart") : null,
+      p.container && (running || p.tunnel) ? h("button", { class: "btn danger", onclick: () => run("stop", { path: p.path }, p.name + " gestoppt"), title: "Container stoppen und Tunnel beenden" }, "■ Stoppen") : null,
+      p.container ? h("button", { class: "btn", onclick: () => showOutput("Container-Logs · " + p.name, "container_logs", { path: p.path }) }, "Logs") : null,
+      p.public_url ? h("button", { class: "btn", onclick: () => showOutput("Tunnel-Log · " + p.name, "tunnel_log", { path: p.path }) }, "Tunnel-Log") : null,
+      moveButtons(p)
+    );
+
+    const tools = h("div", { class: "tools" },
+      g ? h("button", { class: "btn ghost", onclick: () => job("git_pull", { path: p.path }), title: "git pull --ff-only" }, "⇣ Pull") : null,
+      g ? h("button", { class: "btn ghost", onclick: () => showOutput("git status · " + p.name, "git_status", { path: p.path }) }, "Git-Status") : null,
+      localUi() ? h("button", { class: "btn ghost", onclick: () => run("open_folder", { path: p.path }), title: "Im Explorer öffnen" }, "📁 Ordner") : null,
+      localUi() ? h("button", { class: "btn ghost", onclick: () => run("open_vscode", { path: p.path }), title: "In VS Code öffnen" }, "VS Code") : null,
+      localUi() ? h("button", { class: "btn ghost", onclick: () => run("open_terminal", { path: p.path }), title: "Terminal hier öffnen" }, "Terminal") : null
+    );
+
+    return h("article", { class: "card" + (p.exists ? "" : " missing") + (active.length > 1 ? " conflict" : "") },
+      h("div", { class: "card-head" },
+        h("div", { class: "title" },
+          h("div", { class: "name" }, p.name),
+          p.note ? h("div", { class: "note" }, p.note) : null,
+          h("div", { class: "path" }, p.exists ? p.path : p.path + " (Ordner fehlt)")),
+        h("button", { class: "btn ghost", title: "Einstellungen", onclick: () => settings(p, i) }, "⋯")),
+      badges,
+      active.length > 1 ? h("div", { class: "conflict-msg" }, "⚠️ Läuft gleichzeitig auf " + active.join(" und ") + " – Besucher landen zufällig auf einem der beiden! Auf einem Rechner stoppen.") : null,
+      autostart,
+      gitBox,
+      links.childNodes.length ? links : null,
+      actions.childNodes.length ? actions : null,
+      tools.childNodes.length ? tools : null
+    );
+  }
+
+  function render() {
+    renderHeader();
+    const banner = $("#banner");
+    banner.replaceChildren();
+    const grid = $("#grid");
+    if (!data || data.error) {
+      banner.append(h("div", { class: "banner" }, `⚠️ ${selected} ist gerade nicht erreichbar (${data ? data.error : "keine Daten"}). Ist der Rechner an und läuft das Panel dort?`));
+      grid.replaceChildren();
+      return;
+    }
+    if (!data.docker_ok) {
+      banner.append(h("div", { class: "banner" }, "⚠️ Docker läuft auf " + (selected || "diesem Rechner") + " gerade nicht – Container-Status und Starten sind erst verfügbar, wenn Docker Desktop läuft.",
+        data.is_windows ? h("button", { class: "btn", onclick: () => run("start_docker", {}, "Docker Desktop wird gestartet") }, "Docker Desktop starten") : null));
+    }
+    if (!data.projects.length) {
+      grid.replaceChildren(h("div", { class: "empty" }, "Noch keine Projekte. ", h("button", { class: "btn primary", onclick: addProject }, "＋ Projekt hinzufügen")));
+      return;
+    }
+    grid.replaceChildren(...data.projects.map(card));
+  }
+
+  // ---------- Aktionen
+  async function run(name, body, okMsg) {
+    try {
+      const r = await act(name, body);
+      if (r.ok === false) toast((r.output || "Fehlgeschlagen").trim().slice(0, 200), true);
+      else if (okMsg) toast(okMsg);
+    } catch (e) {
+      toast(e.message, true);
+    }
+    load();
+  }
+
+  // ---------- Modal
+  function openModal(title, body, foot = []) {
+    clearInterval(jobTimer);
+    $("#m-title").textContent = title;
+    $("#m-state").textContent = "";
+    $("#m-body").replaceChildren(body);
+    $("#m-foot").replaceChildren(...foot);
+    $("#m-foot").style.justifyContent = "";
+    $("#overlay").classList.add("open");
+  }
+  function closeModal() {
+    clearInterval(jobTimer);
+    $("#overlay").classList.remove("open");
+  }
+  $("#m-close").onclick = closeModal;
+  $("#overlay").addEventListener("click", (e) => { if (e.target.id === "overlay") closeModal(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+
+  async function showOutput(title, name, body = {}) {
+    const pre = h("pre", { class: "out" }, "lädt …");
+    openModal(title + (selfName && selected !== selfName ? " · " + selected : ""), pre, [h("button", { class: "btn", onclick: () => showOutput(title, name, body) }, "⟳ Neu laden")]);
+    try {
+      const r = await act(name, body);
+      pre.textContent = (r.output || "").trim() || "(leer)";
+      pre.scrollTop = pre.scrollHeight;
+    } catch (e) {
+      pre.textContent = "Fehler: " + e.message;
+    }
+  }
+
+  async function job(name, body = {}) {
+    const m = selected;
+    let r;
+    try { r = await act(name, body, m); } catch (e) { toast(e.message, true); return; }
+    const pre = h("pre", { class: "out" }, "");
+    openModal("…", pre, [h("button", { class: "btn", onclick: closeModal }, "Schließen")]);
+    let failures = 0;
+    const poll = async () => {
+      try {
+        const j = await api("/api/job/" + r.job, undefined, m);
+        failures = 0;
+        $("#m-title").textContent = j.title + (selfName && m !== selfName ? " · " + m : "");
+        const atBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 20;
+        pre.textContent = j.output || "läuft …";
+        if (atBottom) pre.scrollTop = pre.scrollHeight;
+        if (j.done) {
+          clearInterval(jobTimer);
+          $("#m-state").textContent = j.code === 0 ? "✅ fertig" : "❌ Fehler (Exit-Code " + j.code + ")";
+          load(true);
+        } else {
+          $("#m-state").textContent = "⏳ läuft … " + Math.round(Date.now() / 1000 - j.started) + " s";
+        }
+      } catch (e) {
+        if (++failures > 10) { clearInterval(jobTimer); $("#m-state").textContent = "Verbindung verloren"; }
+      }
+    };
+    poll();
+    jobTimer = setInterval(poll, 1000);
+  }
+
+  function settings(p, i) {
+    const f = {};
+    const field = (key, label, value, placeholder, hint) => {
+      f[key] = h("input", { class: "t", value: value || "", placeholder: placeholder || "" });
+      return [h("label", { class: "f" }, label), f[key], hint ? h("div", { class: "hint" }, hint) : null];
+    };
+    const body = h("div", {},
+      field("name", "Anzeigename", p.overrides.name, folderName(p.path)),
+      field("note", "Notiz", p.overrides.note, "z.B. Wofür ist das Projekt?"),
+      field("url", "Öffentliche Adresse", p.overrides.url, p.public_url || "https://…", "Leer lassen = automatisch aus deploy.py (PUBLIC_HOSTNAME)."),
+      field("container", "Container-Name", p.overrides.container, p.container || "", "Leer lassen = automatisch aus deploy.py."),
+      h("label", { class: "f" }, "Reihenfolge"),
+      h("div", { class: "row" },
+        h("button", { class: "btn", disabled: i === 0, onclick: async () => { await act("move_project_order", { path: p.path, delta: -1 }); closeModal(); load(); } }, "↑ nach vorne"),
+        h("button", { class: "btn", disabled: i === data.projects.length - 1, onclick: async () => { await act("move_project_order", { path: p.path, delta: 1 }); closeModal(); load(); } }, "↓ nach hinten"),
+        h("span", { class: "hint" }, "Die Reihenfolge gilt auch für den Autostart."))
+    );
+    let armed = false;
+    const removeBtn = h("button", { class: "btn danger", onclick: async () => {
+      if (!armed) { armed = true; removeBtn.textContent = "Wirklich entfernen?"; return; }
+      await act("remove_project", { path: p.path });
+      closeModal(); toast(p.name + " aus dem Panel entfernt (Ordner bleibt erhalten)"); load();
+    } }, "Aus Panel entfernen");
+    openModal("Einstellungen · " + p.name, body, [
+      removeBtn, h("span", { class: "spacer" }),
+      h("button", { class: "btn", onclick: closeModal }, "Abbrechen"),
+      h("button", { class: "btn primary", onclick: async () => {
+        const payload = { path: p.path };
+        for (const k in f) payload[k] = f[k].value;
+        try { await act("update_project", payload); closeModal(); toast("Gespeichert"); load(); } catch (e) { toast(e.message, true); }
+      } }, "Speichern"),
+    ]);
+    $("#m-foot").style.justifyContent = "flex-start";
+  }
+
+  async function addProject() {
+    const m = selected;
+    const list = h("div", {}, h("p", { class: "muted" }, "Suche Git-Repos …"));
+    const root = h("input", { class: "t" });
+    const body = h("div", {},
+      h("label", { class: "f" }, "Gesucht wird in" + (selfName ? " (auf " + m + ")" : "")),
+      h("div", { class: "row" }, root, h("button", { class: "btn", onclick: async () => { await act("set_scan_root", { value: root.value }, m); fill(); } }, "Suchen")),
+      h("div", { class: "hint" }, "Alle Unterordner mit .git werden angezeigt."),
+      h("div", { class: "gap" }),
+      list);
+    openModal("Projekt hinzufügen", body, [h("button", { class: "btn", onclick: () => { closeModal(); load(); } }, "Fertig")]);
+    async function fill() {
+      const r = await api("/api/discover", undefined, m);
+      root.value = r.scan_root;
+      if (!r.repos.length) { list.replaceChildren(h("p", { class: "muted" }, "Keine Git-Repos gefunden.")); return; }
+      list.replaceChildren(...r.repos.map((repo) => {
+        const tags = [repo.deploy ? "deploy.py" : null, repo.dockerfile ? "Dockerfile" : null].filter(Boolean).join(" · ");
+        const btn = h("button", { class: "btn" + (repo.tracked ? "" : " primary"), disabled: repo.tracked, onclick: async () => {
+          await act("add_project", { path: repo.path }, m);
+          btn.textContent = "✓ hinzugefügt"; btn.disabled = true; btn.className = "btn";
+        } }, repo.tracked ? "✓ im Panel" : "Hinzufügen");
+        return h("div", { class: "repo" },
+          h("div", { class: "grow" }, h("div", { class: "name small" }, repo.name), h("div", { class: "path" }, tags || "nur Git")),
+          btn);
+      }));
+    }
+    fill().catch((e) => list.replaceChildren(h("p", { class: "muted" }, "Fehler: " + e.message)));
+  }
+
+  // ---------- Panel-Update (Code von GitHub holen, auf einem oder allen Rechnern)
+  function versionText(v) {
+    if (!v) return "kein Git-Repo";
+    return v.hash + " · " + v.subject + " · " + relTime(v.date);
+  }
+
+  async function runUpdate(m, pre) {
+    const r = await act("panel_update", {}, m);
+    for (let i = 0; i < 120; i++) {
+      await new Promise((ok) => setTimeout(ok, 1000));
+      let j;
+      try { j = await api("/api/job/" + r.job, undefined, m); } catch (e) { continue; }
+      pre.textContent = pre.dataset.prefix + j.output;
+      pre.scrollTop = pre.scrollHeight;
+      if (j.done) return j;
+    }
+    return { code: 1, output: "Zeitüberschreitung" };
+  }
+
+  function updateDialog() {
+    const rows = machines.map((m) => {
+      const v = views[m] && views[m].panel_version;
+      return h("div", { class: "repo" },
+        h("div", { class: "grow" }, h("div", { class: "name small" }, m || "Dieser PC"), h("div", { class: "path" }, versionText(v))));
+    });
+    const pre = h("pre", { class: "out hidden" });
+    pre.dataset.prefix = "";
+    const body = h("div", {},
+      h("p", { class: "muted" }, "Holt den neuesten Panel-Code von GitHub (git pull) und startet das Panel neu. Deine Einstellungen bleiben erhalten."),
+      ...rows, h("div", { class: "gap" }), pre);
+    const btn = h("button", { class: "btn primary", onclick: async () => {
+      btn.disabled = true;
+      pre.classList.remove("hidden");
+      // erst die anderen Rechner, zuletzt diesen (der startet dabei neu)
+      const order = machines.filter((m) => m !== selfName).concat([selfName]);
+      let log = "";
+      for (const m of order) {
+        pre.dataset.prefix = log + "── " + (m || "Dieser PC") + " ──\n";
+        if (m === selfName) restarting = true;
+        try {
+          const j = await runUpdate(m, pre);
+          log = pre.dataset.prefix + j.output + "\n";
+        } catch (e) {
+          log = pre.dataset.prefix + "Fehler: " + e.message + "\n\n";
+        }
+        pre.textContent = log;
+      }
+      pre.textContent = log + "\nPanel lädt in 8 Sekunden neu …";
+      setTimeout(() => location.reload(), 8000);
+    } }, machines.length > 1 ? "Alle Rechner aktualisieren" : "Aktualisieren");
+    openModal("Panel-Update", body, [h("button", { class: "btn", onclick: closeModal }, "Schließen"), btn]);
+  }
+  $("#btn-update").onclick = updateDialog;
+
+  $("#btn-refresh").onclick = () => load(true);
+  $("#btn-add").onclick = addProject;
+
+  load(true);
+  setInterval(() => { if (!document.hidden && !$("#overlay").classList.contains("open")) load(); }, 15000);
+  setInterval(() => api("/api/ping").catch(() => {}), 20000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+})();
+</script>
+</body>
+</html>

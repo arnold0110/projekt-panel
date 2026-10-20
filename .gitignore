@@ -1,0 +1,11 @@
+# rechnerspezifisch / geheim
+machine.json
+projects.json
+# Laufzeit
+*.log
+incoming/
+outgoing/
+backups/
+panel/.running.json
+panel/.token
+__pycache__/
