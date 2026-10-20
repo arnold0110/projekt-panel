@@ -422,6 +422,7 @@ def panel_version():
     return {"hash": h, "subject": subject, "date": date}
 
 
+STARTUP_VERSION = (panel_version() or {}).get("hash")  # Stand, mit dem dieser Prozess gestartet ist
 RESTART_HOOK = None  # wird von panel.pyw gesetzt: startet den Server-Prozess neu
 
 
@@ -437,18 +438,19 @@ def panel_update(log):
     if not (BASE_DIR / ".git").exists():
         log("Dieser Panel-Ordner ist noch kein Git-Repo – siehe ANLEITUNG.md, Abschnitt „Panel-Updates“.")
         return 1
-    before = (panel_version() or {}).get("hash")
-    log(f"Aktueller Stand: {before}")
+    running = STARTUP_VERSION
+    log(f"Laufender Code: {running}")
     if stream_cmd(["git", "-C", str(BASE_DIR), "pull", "--ff-only"], str(BASE_DIR), log, prefix="  ") != 0:
-        log("❌ git pull fehlgeschlagen (lokale Änderungen im Panel-Ordner?). Nichts verändert.")
+        log("❌ git pull fehlgeschlagen – evtl. lokale, nicht committete Änderungen im Panel-Ordner. Nichts verändert.")
         return 1
-    after = (panel_version() or {}).get("hash")
-    if after == before:
+    now = (panel_version() or {}).get("hash")
+    if now == running:
         log("✅ Panel ist schon auf dem neuesten Stand.")
         return 0
-    log(f"Neuer Stand: {after} – Panel startet in 3 Sekunden neu …")
+    # Neuer Stand – entweder gerade heruntergeladen oder auf diesem Rechner selbst committet
+    log(f"Neuer Stand: {now} – Panel startet in 3 Sekunden neu …")
     if not schedule_panel_restart():
-        log("⚠️ Neustart nicht möglich – bitte restart_panel.ps1 von Hand ausführen.")
+        log("⚠️ Automatischer Neustart nicht möglich – bitte restart_panel.ps1 ausführen.")
     return 0
 
 
