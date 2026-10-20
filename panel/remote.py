@@ -9,6 +9,7 @@ Sicherheitsmodell
   und Identität. Ohne gültiges JWT gibt es nur 403.
 """
 import base64
+import re
 import hashlib
 import json
 import secrets
@@ -156,7 +157,11 @@ def identify(headers, machine, path=""):
 # ------------------------------------------------------------ andere Rechner
 
 class PeerError(Exception):
-    pass
+    def __init__(self, msg, network=False, status=None, body=None):
+        super().__init__(msg)
+        self.network = network  # True = Internet/DNS weg (nicht: anderer Rechner aus)
+        self.status = status    # HTTP-Status der Gegenseite (falls sie geantwortet hat)
+        self.body = body        # deren JSON-Antwort
 
 
 def find_peer(machine, name):
@@ -193,11 +198,42 @@ def peer_request(machine, peer, method, path, body=None, raw=None, timeout=60):
             return json.loads(payload)
     except urllib.error.HTTPError as e:
         try:
-            msg = json.loads(e.read()).get("error", "")
+            body = json.loads(e.read())
+            msg = body.get("error", "")
         except Exception:  # noqa: BLE001
-            msg = ""
-        raise PeerError(f"{peer['name']}: HTTP {e.code} {msg}".strip()) from None
+            body, msg = None, ""
+        raise PeerError(f"{peer['name']}: HTTP {e.code} {msg}".strip(), status=e.code, body=body) from None
     except urllib.error.URLError as e:
-        raise PeerError(f"{peer['name']} nicht erreichbar ({e.reason})") from None
+        raise PeerError(f"{peer['name']} nicht erreichbar ({e.reason})", network=True) from None
     except TimeoutError:
         raise PeerError(f"{peer['name']}: Zeitüberschreitung") from None
+
+
+# ------------------------------------------------------------ Doppelbetrieb verhindern
+
+def folder_name(path):
+    return re.split(r"[\\/]", str(path).rstrip("\\/"))[-1].lower()
+
+
+def find_elsewhere(machine, path, check="running", timeout=20):
+    """Läuft (bzw. startet automatisch) dasselbe Projekt auf einem anderen Rechner?
+
+    Gibt eine Liste {machine, path} zurück. Nicht erreichbare Rechner werden ignoriert –
+    ist ein Rechner aus, kann dort auch nichts laufen.
+    """
+    if not machine:
+        return []
+    name = folder_name(path)
+    hits = []
+    for peer in machine.get("peers", []):
+        try:
+            ov = peer_request(machine, peer, "GET", "/api/overview", timeout=timeout)
+        except PeerError:
+            continue
+        for p in ov.get("projects", []):
+            if folder_name(p["path"]) != name:
+                continue
+            running = (p.get("docker") or {}).get("state") == "running" or p.get("tunnel")
+            if (check == "running" and running) or (check == "autostart" and p.get("autostart")):
+                hits.append({"machine": peer["name"], "path": p["path"]})
+    return hits

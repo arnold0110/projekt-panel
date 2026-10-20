@@ -52,6 +52,12 @@ foreach ($project in $projects) {
         Log "[$name] uebersprungen: kein deploy.py gefunden."
         continue
     }
+    # Laeuft das Projekt schon auf einem anderen Rechner? Dann hier nicht starten.
+    $guard = python (Join-Path $PSScriptRoot "panel\guard.py") $project 2>&1 | Out-String
+    if ($LASTEXITCODE -eq 3) {
+        Log "[$name] uebersprungen: $($guard.Trim())"
+        continue
+    }
     Log "[$name] starte deploy.py ..."
     Push-Location $project
     try {

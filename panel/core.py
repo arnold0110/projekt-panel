@@ -245,6 +245,8 @@ def project_status(entry, containers, check_online):
         "exists": exists,
         "autostart": bool(entry.get("autostart")),
         "hosted_on": entry.get("hosted_on"),
+        "hidden": bool(entry.get("hidden")),
+        "archived": bool(entry.get("archived")),
         "deployable": exists and (Path(folder) / "deploy.py").exists(),
         "has_dockerfile": exists and (Path(folder) / "Dockerfile").exists(),
         "mode": deploy.get("mode"),
@@ -471,9 +473,31 @@ def action(name, data):
         raise ValueError("Unbekanntes Projekt")
 
     if name == "set_autostart":
+        if data.get("value") and entry.get("archived"):
+            raise ValueError("Archivierte Projekte starten nicht automatisch – erst wiederherstellen")
         entry["autostart"] = bool(data.get("value"))
         save_config(cfg)
         return {"ok": True}
+
+    if name == "set_hidden":
+        entry["hidden"] = bool(data.get("value"))
+        if not entry["hidden"]:
+            entry.pop("hidden")
+        save_config(cfg)
+        return {"ok": True}
+
+    if name == "set_archived":
+        out = ""
+        if data.get("value"):
+            # Archivieren = stilllegen: stoppen, kein Autostart mehr
+            out = stop_project(entry["path"], entry.get("container") or parse_deploy(entry["path"]).get("container"))
+            entry["archived"] = True
+            entry["autostart"] = False
+            entry.pop("hidden", None)
+        else:
+            entry.pop("archived", None)
+        save_config(cfg)
+        return {"ok": True, "output": out}
 
     if name == "update_project":
         for key in ("name", "url", "container", "note"):
@@ -516,6 +540,8 @@ def action(name, data):
     st_container = (entry or {}).get("container") or parse_deploy(folder).get("container") if folder else None
 
     if name == "deploy":
+        if entry.get("archived"):
+            raise ValueError("Projekt ist archiviert – erst wiederherstellen")
         if entry.pop("hosted_on", None):
             save_config(cfg)
         return {"job": start_job(f"Deploy: {Path(folder).name}", [python_exe(), "deploy.py"], folder)}

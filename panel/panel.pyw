@@ -134,6 +134,12 @@ class Handler(BaseHTTPRequestHandler):
         url = urllib.parse.urlsplit(self.path)
         path, query = url.path, urllib.parse.parse_qs(url.query)
 
+        if method == "GET" and path in ("/icon.png", "/favicon.ico"):
+            f = PANEL_DIR / ("icon.png" if path == "/icon.png" else "icon.ico")
+            if f.exists():
+                return self._send(200, f.read_bytes(), "image/png" if f.suffix == ".png" else "image/x-icon")
+            return self._send(404, {"error": "not found"})
+
         if method == "GET" and path == "/":
             # Lokal enthält die Seite selbst nichts Geheimes (Token steckt im #-Teil der URL).
             if self._is_local_host() or self._identity():
@@ -199,9 +205,24 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(403, {"error": "Nur am Rechner selbst möglich"})
                 if name == "move_project":
                     return self._send(200, start_move(data))
+                # Doppelbetrieb verhindern: erst beim anderen Rechner nachfragen
+                if name == "deploy" and not data.get("force"):
+                    hits = remote.find_elsewhere(MACHINE, data.get("path", ""), "running")
+                    if hits:
+                        return self._send(409, {"error": f"Läuft bereits auf {hits[0]['machine']} – nicht doppelt starten.",
+                                                "conflict": hits[0]})
+                if name == "set_autostart" and data.get("value"):
+                    hits = remote.find_elsewhere(MACHINE, data.get("path", ""), "autostart")
+                    if hits:
+                        return self._send(409, {"error": f"Autostart ist schon auf {hits[0]['machine']} an – "
+                                                         f"ein Projekt darf nur auf einem Rechner automatisch starten.",
+                                                "conflict": hits[0]})
                 return self._send(200, core.action(name, data))
             return self._send(404, {"error": "not found"})
         except remote.PeerError as e:
+            # Antwort des anderen Panels (z.B. 409 Konflikt) unverändert durchreichen
+            if e.status and isinstance(e.body, dict) and 400 <= e.status < 500:
+                return self._send(e.status, e.body)
             return self._send(502, {"error": str(e)})
         except ValueError as e:
             return self._send(400, {"error": str(e)})

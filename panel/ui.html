@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Projekt-Panel</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎛️</text></svg>">
+<link rel="icon" type="image/png" href="/icon.png">
 <style>
   :root {
     --bg: #0f1115; --panel: #161a21; --card: #1a1f27; --line: #272e39; --line-2: #323b48;
@@ -35,6 +35,8 @@
   }
   header h1 { font-size: 17px; margin: 0 8px 0 0; font-weight: 650; letter-spacing: .01em; }
   .spacer { flex: 1; }
+  .brand { display: inline-flex; align-items: center; gap: 9px; }
+  .brand img { border-radius: 6px; }
   .chip {
     display: inline-flex; align-items: center; gap: 8px; padding: 5px 6px 5px 11px;
     border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--muted); font-size: 13px;
@@ -145,11 +147,21 @@
   .gap { height: 10px; }
   .name.small { font-size: 14px; }
   .hidden { display: none !important; }
+  .filters { display: flex; gap: 8px; margin: -4px 0 14px; flex-wrap: wrap; }
+  .filters:empty { display: none; }
+  .fchip { border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 999px; padding: 4px 12px; font-size: 13px; cursor: pointer; }
+  .fchip.on { color: var(--text); border-color: var(--accent); }
+  .card.is-hidden { opacity: .65; border-style: dashed; }
+  .archive:empty { display: none; }
+  .archive h2 { font-size: 14px; color: var(--muted); font-weight: 600; margin: 28px 0 10px; text-transform: uppercase; letter-spacing: .06em; }
+  .acard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; }
+  .acard .grow { flex: 1; min-width: 0; }
+  .alist { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 10px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>🎛️ Projekt-Panel</h1>
+  <h1 class="brand"><img src="/icon.png" alt="" width="24" height="24">Projekt-Panel</h1>
   <nav class="mtabs" id="machines" aria-label="Rechner"></nav>
   <span class="chip" id="chip-docker"><span class="dot"></span><span>Docker <b>…</b></span></span>
   <span class="chip" id="chip-task"><span class="dot"></span><span>Autostart <b>…</b></span></span>
@@ -163,7 +175,9 @@
 
 <main>
   <div id="banner"></div>
+  <div class="filters" id="filters"></div>
   <div class="grid" id="grid"></div>
+  <section id="archive" class="archive"></section>
 </main>
 
 <div class="overlay" id="overlay">
@@ -194,6 +208,9 @@
   let lastOnline = 0;
   let loading = false;
   let jobTimer = null;
+  let showHidden = false;
+  let showArchive = false;
+  try { showArchive = localStorage.getItem("showArchive") === "1"; } catch (e) {}
 
   // ---------- Theme
   try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
@@ -222,7 +239,11 @@
       throw e;
     }
     const json = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(json.error || ("HTTP " + res.status));
+    if (!res.ok) {
+      const err = new Error(json.error || ("HTTP " + res.status));
+      err.data = json;
+      throw err;
+    }
     return json;
   }
   const act = (name, body = {}, m = selected) => api("/api/action/" + name, body, m);
@@ -419,6 +440,7 @@
       dockerBadge(p),
       p.public_url ? h("span", { class: "badge", title: "Cloudflare Tunnel" }, h("span", { class: "dot " + (p.tunnel ? "ok" : "") }), "Tunnel ", h("b", {}, p.tunnel ? "an" : "aus")) : null,
       onlineBadge(p),
+      p.hidden ? h("span", { class: "badge", title: "Ausgeblendet – läuft trotzdem normal weiter" }, "👁 ausgeblendet") : null,
       p.hosted_on && !active.includes(selected) ? h("span", { class: "badge hosted", title: "Wurde per Umzug verschoben" }, "→ gehostet auf ", h("b", {}, p.hosted_on)) : null,
       !p.deployable && !p.has_dockerfile ? h("span", { class: "badge" }, "kein Docker-Projekt") : null,
       p.mode ? h("span", { class: "badge", title: "HOSTING_MODE in deploy.py" }, "Modus ", h("b", {}, p.mode)) : null
@@ -476,7 +498,7 @@
       localUi() ? h("button", { class: "btn ghost", onclick: () => run("open_terminal", { path: p.path }), title: "Terminal hier öffnen" }, "Terminal") : null
     );
 
-    return h("article", { class: "card" + (p.exists ? "" : " missing") + (active.length > 1 ? " conflict" : "") },
+    return h("article", { class: "card" + (p.exists ? "" : " missing") + (active.length > 1 ? " conflict" : "") + (p.hidden ? " is-hidden" : "") },
       h("div", { class: "card-head" },
         h("div", { class: "title" },
           h("div", { class: "name" }, p.name),
@@ -493,6 +515,19 @@
     );
   }
 
+  function archiveCard(p, i) {
+    const g = p.git;
+    return h("div", { class: "acard" },
+      h("div", { class: "grow" },
+        h("div", { class: "name small" }, "🗄 " + p.name),
+        p.note ? h("div", { class: "note" }, p.note) : null,
+        h("div", { class: "path" }, p.path),
+        g && g.commit ? h("div", { class: "path" }, "zuletzt: " + g.commit.subject + " · " + relTime(g.commit.date)) : null),
+      localUi() ? h("button", { class: "btn ghost", onclick: () => run("open_folder", { path: p.path }) }, "📁") : null,
+      h("button", { class: "btn", onclick: () => settings(p, i) }, "⋯"),
+      h("button", { class: "btn", onclick: () => run("set_archived", { path: p.path, value: false }, p.name + " wiederhergestellt") }, "Wiederherstellen"));
+  }
+
   function render() {
     renderHeader();
     const banner = $("#banner");
@@ -507,11 +542,31 @@
       banner.append(h("div", { class: "banner" }, "⚠️ Docker läuft auf " + (selected || "diesem Rechner") + " gerade nicht – Container-Status und Starten sind erst verfügbar, wenn Docker Desktop läuft.",
         data.is_windows ? h("button", { class: "btn", onclick: () => run("start_docker", {}, "Docker Desktop wird gestartet") }, "Docker Desktop starten") : null));
     }
-    if (!data.projects.length) {
+    const all = data.projects.map((p, i) => ({ p, i }));
+    const archived = all.filter(({ p }) => p.archived);
+    const hiddenOnes = all.filter(({ p }) => p.hidden && !p.archived);
+    const shown = all.filter(({ p }) => !p.archived && (!p.hidden || showHidden));
+
+    const filters = $("#filters");
+    filters.replaceChildren(...[
+      hiddenOnes.length ? h("button", { class: "fchip" + (showHidden ? " on" : ""), onclick: () => { showHidden = !showHidden; render(); } },
+        (showHidden ? "👁 Ausgeblendete werden angezeigt" : "👁 Ausgeblendete anzeigen") + ` (${hiddenOnes.length})`) : null,
+      archived.length ? h("button", { class: "fchip" + (showArchive ? " on" : ""), onclick: () => {
+        showArchive = !showArchive; try { localStorage.setItem("showArchive", showArchive ? "1" : "0"); } catch (e) {} render(); } },
+        `🗄 Archiv (${archived.length})`) : null,
+    ].filter(Boolean));
+
+    if (!all.length) {
       grid.replaceChildren(h("div", { class: "empty" }, "Noch keine Projekte. ", h("button", { class: "btn primary", onclick: addProject }, "＋ Projekt hinzufügen")));
-      return;
+    } else if (!shown.length) {
+      grid.replaceChildren(h("div", { class: "empty" }, "Alle Projekte sind ausgeblendet oder archiviert."));
+    } else {
+      grid.replaceChildren(...shown.map(({ p, i }) => card(p, i)));
     }
-    grid.replaceChildren(...data.projects.map(card));
+
+    const arch = $("#archive");
+    if (!archived.length || !showArchive) { arch.replaceChildren(); return; }
+    arch.replaceChildren(h("h2", {}, "Archiv"), h("div", { class: "alist" }, archived.map(({ p, i }) => archiveCard(p, i))));
   }
 
   // ---------- Aktionen
@@ -521,9 +576,23 @@
       if (r.ok === false) toast((r.output || "Fehlgeschlagen").trim().slice(0, 200), true);
       else if (okMsg) toast(okMsg);
     } catch (e) {
-      toast(e.message, true);
+      if (e.data && e.data.conflict) conflictDialog(e.message, e.data.conflict);
+      else toast(e.message, true);
     }
     load();
+  }
+
+  // Projekt läuft schon auf einem anderen Rechner → statt doppelt starten: hierher umziehen
+  function conflictDialog(message, c) {
+    const here = selected;
+    const body = h("div", {},
+      h("p", {}, "⚠️ " + message),
+      h("p", { class: "muted" }, `Ein Projekt darf immer nur auf einem Rechner laufen, sonst verteilt Cloudflare die Besucher zufällig auf beide. ` +
+        `Mit „Hierher umziehen“ wird es auf ${c.machine} gestoppt und samt Daten nach ${here} übertragen.`));
+    openModal("Läuft bereits auf " + c.machine, body, [
+      h("button", { class: "btn", onclick: closeModal }, "Abbrechen"),
+      h("button", { class: "btn primary", onclick: () => job("move_project", { path: c.path, target: here }, c.machine) }, `⇄ Von ${c.machine} hierher umziehen`),
+    ]);
   }
 
   // ---------- Modal
@@ -556,10 +625,13 @@
     }
   }
 
-  async function job(name, body = {}) {
-    const m = selected;
+  async function job(name, body = {}, m = selected) {
     let r;
-    try { r = await act(name, body, m); } catch (e) { toast(e.message, true); return; }
+    try { r = await act(name, body, m); } catch (e) {
+      if (e.data && e.data.conflict) conflictDialog(e.message, e.data.conflict);
+      else toast(e.message, true);
+      return;
+    }
     const pre = h("pre", { class: "out" }, "");
     openModal("…", pre, [h("button", { class: "btn", onclick: closeModal }, "Schließen")]);
     let failures = 0;
@@ -601,7 +673,18 @@
       h("div", { class: "row" },
         h("button", { class: "btn", disabled: i === 0, onclick: async () => { await act("move_project_order", { path: p.path, delta: -1 }); closeModal(); load(); } }, "↑ nach vorne"),
         h("button", { class: "btn", disabled: i === data.projects.length - 1, onclick: async () => { await act("move_project_order", { path: p.path, delta: 1 }); closeModal(); load(); } }, "↓ nach hinten"),
-        h("span", { class: "hint" }, "Die Reihenfolge gilt auch für den Autostart."))
+        h("span", { class: "hint" }, "Die Reihenfolge gilt auch für den Autostart.")),
+      h("label", { class: "f" }, "Sichtbarkeit"),
+      h("div", { class: "row" },
+        p.archived ? null : h("button", { class: "btn", onclick: async () => {
+          await act("set_hidden", { path: p.path, value: !p.hidden }); closeModal();
+          toast(p.hidden ? p.name + " wird wieder angezeigt" : p.name + " ausgeblendet (läuft weiter)"); load(); } },
+          p.hidden ? "👁 Wieder anzeigen" : "🙈 Ausblenden"),
+        h("button", { class: "btn", onclick: async () => {
+          const r = await act("set_archived", { path: p.path, value: !p.archived }); closeModal();
+          toast(p.archived ? p.name + " wiederhergestellt" : p.name + " archiviert (gestoppt, kein Autostart)"); load(); } },
+          p.archived ? "↩ Aus dem Archiv holen" : "🗄 Archivieren")),
+      h("div", { class: "hint" }, "Ausblenden: nur unsichtbar, läuft weiter. Archivieren: wird gestoppt, kein Autostart, Ordner bleibt erhalten.")
     );
     let armed = false;
     const removeBtn = h("button", { class: "btn danger", onclick: async () => {

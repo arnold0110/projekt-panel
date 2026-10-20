@@ -23,7 +23,8 @@ $lnk = $shell.CreateShortcut($lnkPath)
 $lnk.TargetPath = $pythonw
 $lnk.Arguments = "`"$panel`""
 $lnk.WorkingDirectory = Split-Path $panel
-$lnk.IconLocation = "$env:SystemRoot\System32\imageres.dll,109"
+$icon = Join-Path $PSScriptRoot "panel\icon.ico"
+if (Test-Path $icon) { $lnk.IconLocation = "$icon,0" } else { $lnk.IconLocation = "$env:SystemRoot\System32\imageres.dll,109" }
 $lnk.Description = "Projekt-Panel: Docker-Projekte verwalten"
 $lnk.Save()
 
